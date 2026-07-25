@@ -13,23 +13,22 @@ app = FastAPI(title="A2A Invoice Agent")
 
 # Environment & Configuration
 BASE_URL = os.getenv("BASE_URL", "https://your-app.onrender.com/a2a").rstrip("/")
-# Deduce origin for discovery (e.g. https://host)
 ORIGIN = "/".join(BASE_URL.split("/")[:3]) if "://" in BASE_URL else BASE_URL
 AIPIPE_TOKEN = os.getenv("AIPIPE_TOKEN", "")
 AIPIPE_BASE_URL = os.getenv("AIPIPE_BASE_URL", "https://aipipe.org/openai/v1")
 MODEL_NAME = os.getenv("MODEL_NAME", "gpt-4o-mini")
 
 # In-Memory Storage
-# Tasks: { (principal, task_id): TaskDict }
+# Tasks Store: { (principal, task_id): TaskDict }
 tasks_db: Dict[tuple, Dict[str, Any]] = {}
 
-# Idempotency: { (principal, message_id): {"hash": str, "task_id": str} }
+# Idempotency Store: { (principal, message_id): {"hash": str, "task_id": str} }
 idempotency_db: Dict[tuple, Dict[str, Any]] = {}
 
 # Package Decision Cache: { canonical_hash: dict_decision }
 package_cache: Dict[str, Dict[str, Any]] = {}
 
-# Locks for Task Atomicity
+# Fine-Grained Locks for Task Race Conditions: { task_id: asyncio.Lock }
 task_locks: Dict[str, asyncio.Lock] = {}
 global_lock = asyncio.Lock()
 
@@ -72,7 +71,7 @@ def verify_headers(a2a_version: Optional[str], content_type: Optional[str] = Non
 
 
 def get_principal(authorization: Optional[str]) -> str:
-    """Extracts and verifies Bearer token for user isolation."""
+    """Extracts and verifies Bearer token for multi-tenant isolation."""
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -151,57 +150,4 @@ Return raw JSON matching this schema:
             raw_content = data["choices"][0]["message"]["content"]
             
             # Clean Markdown code block fences safely
-            cleaned = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw_content.strip(), flags=re.MULTILINE)
-            decision = json.loads(cleaned)
-            
-            # Ensure 3 valid evidence refs
-            all_bracket_refs = re.findall(r"\[[A-Za-z0-9_\-\.]+\]", json.dumps(pkg))
-            evidence = decision.get("evidenceRefs", [])
-            if len(evidence) < 3:
-                for ref in all_bracket_refs:
-                    if ref not in evidence and not any(d in ref.lower() for d in ["cover", "archive", "decoy"]):
-                        evidence.append(ref)
-                    if len(evidence) == 3:
-                        break
-            decision["evidenceRefs"] = evidence[:3] if len(evidence) >= 3 else (evidence + ["[REF-001]", "[REF-002]", "[REF-003]"])[:3]
-
-            # Rationale compliance
-            rationale = decision.get("rationale", "")
-            action = decision.get("action", "open_exception")
-            e1, e2 = decision["evidenceRefs"][0], decision["evidenceRefs"][1]
-            if len(rationale) < 60 or action not in rationale or e1 not in rationale:
-                decision["rationale"] = f"Selecting action {action} based on decisive evidence references {e1}, {e2}, and {decision['evidenceRefs'][2]}."
-
-            package_cache[pkg_hash] = decision
-            return decision
-
-    except Exception as e:
-        # Fallback decision on error
-        all_bracket_refs = re.findall(r"\[[A-Za-z0-9_\-\.]+\]", json.dumps(pkg))
-        refs = all_bracket_refs[:3] if len(all_bracket_refs) >= 3 else ["[EV-1]", "[EV-2]", "[EV-3]"]
-        fallback = {
-            "action": "open_exception",
-            "facts": {
-                "vendorName": str(pkg.get("vendorName", "Unknown")),
-                "invoiceNumber": str(pkg.get("invoiceNumber", "INV-UNKNOWN")),
-                "amountMinor": int(pkg.get("amountMinor", 0)),
-                "currency": str(pkg.get("currency", "INR"))
-            },
-            "evidenceRefs": refs,
-            "rationale": f"Action open_exception selected after analysis of evidence references {refs[0]} and {refs[1]}."
-        }
-        package_cache[pkg_hash] = fallback
-        return fallback
-
-    try:
-        async with httpx.AsyncClient(timeout=35.0) as client:
-            resp = await client.post(
-                f"{AIPIPE_BASE_URL.rstrip('/')}/chat/completions",
-                headers=headers,
-                json=body
-            )
-            resp.raise_for_status()
-            data = resp.json()
-            raw_content = data["choices"][0]["message"]["content"]
-            
-            cleaned = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw_content.strip(), flags=re.MULTILINE)
+            cleaned = re.sub(r"^```(?:json)?\s*|\s*
