@@ -12,23 +12,16 @@ import httpx
 app = FastAPI(title="A2A Invoice Agent")
 
 # Environment & Configuration
-BASE_URL = os.getenv("BASE_URL", "https://your-app.onrender.com/a2a").rstrip("/")
+BASE_URL = os.getenv("BASE_URL", "[https://your-app.onrender.com/a2a](https://your-app.onrender.com/a2a)").rstrip("/")
 ORIGIN = "/".join(BASE_URL.split("/")[:3]) if "://" in BASE_URL else BASE_URL
 AIPIPE_TOKEN = os.getenv("AIPIPE_TOKEN", "")
-AIPIPE_BASE_URL = os.getenv("AIPIPE_BASE_URL", "https://aipipe.org/openai/v1")
+AIPIPE_BASE_URL = os.getenv("AIPIPE_BASE_URL", "[https://aipipe.org/openai/v1](https://aipipe.org/openai/v1)")
 MODEL_NAME = os.getenv("MODEL_NAME", "gpt-4o-mini")
 
 # In-Memory Storage
-# Tasks Store: { (principal, task_id): TaskDict }
 tasks_db: Dict[tuple, Dict[str, Any]] = {}
-
-# Idempotency Store: { (principal, message_id): {"hash": str, "task_id": str} }
 idempotency_db: Dict[tuple, Dict[str, Any]] = {}
-
-# Package Decision Cache: { canonical_hash: dict_decision }
 package_cache: Dict[str, Dict[str, Any]] = {}
-
-# Fine-Grained Locks for Task Race Conditions: { task_id: asyncio.Lock }
 task_locks: Dict[str, asyncio.Lock] = {}
 global_lock = asyncio.Lock()
 
@@ -106,48 +99,4 @@ Invoice Package Data:
 
 Rules:
 1. Identify vendorName, invoiceNumber, amountMinor (int), currency.
-2. Find the controlling paragraph determining the action and extract EXACTLY THREE decisive bracketed evidence references (e.g. ["[REF-123]", "[REF-456]", "[REF-789]"]). Ignore cover sheet, archive examples, or training decoys.
-3. Write a rationale between 60 and 1500 characters. You MUST explicitly state the action name and cite at least two evidence references.
-
-Return raw JSON matching this schema:
-{{
-  "action": "<one_action_above>",
-  "facts": {{
-    "vendorName": "...",
-    "invoiceNumber": "...",
-    "amountMinor": 12345,
-    "currency": "INR"
-  }},
-  "evidenceRefs": ["[...]", "[...]", "[...]"],
-  "rationale": "..."
-}}
-"""
-
-    headers = {
-        "Content-Type": "application/json",
-        "Authorization": f"Bearer {AIPIPE_TOKEN}"
-    }
-    
-    body = {
-        "model": MODEL_NAME,
-        "messages": [
-            {"role": "system", "content": "You are a precise finance auditor AI. Return raw JSON without markdown formatting."},
-            {"role": "user", "content": prompt}
-        ],
-        "temperature": 0.0,
-        "response_format": {"type": "json_object"}
-    }
-
-    try:
-        async with httpx.AsyncClient(timeout=35.0) as client:
-            resp = await client.post(
-                f"{AIPIPE_BASE_URL.rstrip('/')}/chat/completions",
-                headers=headers,
-                json=body
-            )
-            resp.raise_for_status()
-            data = resp.json()
-            raw_content = data["choices"][0]["message"]["content"]
-            
-            # Clean Markdown code block fences safely on one single line
-            cleaned = re.sub(r"^```(?:json)?\s*|\s*
+2. Find the controlling paragraph determining the action and extract EXACTLY THREE decisive bracketed evidence references (e.g. ["[REF-123]", "[REF-456]", "[REF-789]"]). Ignore cover sheet
