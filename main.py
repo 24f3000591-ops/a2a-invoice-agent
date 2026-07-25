@@ -1,102 +1,53 @@
-import os
-import json
-import hashlib
-import asyncio
-import re
-import uuid
-from typing import Dict, Any, List, Optional
-from fastapi import FastAPI, Request, Response, HTTPException, Header, status
-from fastapi.responses import JSONResponse
-import httpx
-
-app = FastAPI(title="A2A Invoice Agent")
-
-# Environment & Configuration
-BASE_URL = os.getenv("BASE_URL", "[https://your-app.onrender.com/a2a](https://your-app.onrender.com/a2a)").rstrip("/")
-ORIGIN = "/".join(BASE_URL.split("/")[:3]) if "://" in BASE_URL else BASE_URL
-AIPIPE_TOKEN = os.getenv("AIPIPE_TOKEN", "")
-AIPIPE_BASE_URL = os.getenv("AIPIPE_BASE_URL", "[https://aipipe.org/openai/v1](https://aipipe.org/openai/v1)")
-MODEL_NAME = os.getenv("MODEL_NAME", "gpt-4o-mini")
-
-# In-Memory Storage
-tasks_db: Dict[tuple, Dict[str, Any]] = {}
-idempotency_db: Dict[tuple, Dict[str, Any]] = {}
-package_cache: Dict[str, Dict[str, Any]] = {}
-task_locks: Dict[str, asyncio.Lock] = {}
-global_lock = asyncio.Lock()
-
-
-async def get_task_lock(task_id: str) -> asyncio.Lock:
-    async with global_lock:
-        if task_id not in task_locks:
-            task_locks[task_id] = asyncio.Lock()
-        return task_locks[task_id]
-
-
-def canonical_json_bytes(obj: Any) -> bytes:
-    """Produces compact key-sorted JSON bytes for deterministic hashing."""
-    return json.dumps(obj, sort_keys=True, separators=(',', ':')).encode('utf-8')
-
-
-def hash_message(message_obj: Dict[str, Any]) -> str:
-    """Hashes recursively key-sorted compact JSON of the message only."""
-    return hashlib.sha256(canonical_json_bytes(message_obj)).hexdigest()
-
-
-def canonical_package_hash(pkg: Dict[str, Any]) -> str:
-    """Hashes canonical content of an invoice package for decision caching."""
-    return hashlib.sha256(canonical_json_bytes(pkg)).hexdigest()
-
-
-def verify_headers(a2a_version: Optional[str], content_type: Optional[str] = None, check_content_type: bool = False):
-    """Strict protocol header checks for A2A 1.0 HTTP+JSON binding."""
-    if a2a_version != "1.0":
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Header 'A2A-Version: 1.0' is required."
-        )
-    if check_content_type:
-        if not content_type or "application/a2a+json" not in content_type.lower():
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Content-Type must be 'application/a2a+json'."
-            )
-
-
-def get_principal(authorization: Optional[str]) -> str:
-    """Extracts and verifies Bearer token for multi-tenant isolation."""
-    if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing or invalid Bearer authorization token."
-        )
-    token = authorization.split("Bearer ")[1].strip()
-    if not token:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Bearer token cannot be empty."
-        )
-    return token
-
-
-# LLM Reasoning Layer with Evidence Extraction
-async def analyze_package_with_llm(pkg: Dict[str, Any]) -> Dict[str, Any]:
-    pkg_hash = canonical_package_hash(pkg)
-    if pkg_hash in package_cache:
-        return package_cache[pkg_hash]
-
+==> Build successful 🎉
+==> Deploying...
+==> Setting WEB_CONCURRENCY=1 by default, based on available CPUs in the instance
+==> Running 'uvicorn main:app --host 0.0.0.0 --port $PORT'
+Traceback (most recent call last):
+  File "/opt/render/project/src/.venv/bin/uvicorn", line 7, in <module>
+    sys.exit(main())
+             ~~~~^^
+  File "/opt/render/project/src/.venv/lib/python3.14/site-packages/click/core.py", line 1569, in __call__
+    return self.main(*args, **kwargs)
+           ~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/opt/render/project/src/.venv/lib/python3.14/site-packages/click/core.py", line 1490, in main
+    rv = self.invoke(ctx)
+  File "/opt/render/project/src/.venv/lib/python3.14/site-packages/click/core.py", line 1353, in invoke
+    return ctx.invoke(self.callback, **ctx.params)
+           ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/render/project/src/.venv/lib/python3.14/site-packages/click/core.py", line 907, in invoke
+    return callback(*args, **kwargs)
+  File "/opt/render/project/src/.venv/lib/python3.14/site-packages/uvicorn/main.py", line 440, in main
+    run(
+    ~~~^
+        app,
+        ^^^^
+    ...<48 lines>...
+        reset_contextvars=reset_contextvars,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/opt/render/project/src/.venv/lib/python3.14/site-packages/uvicorn/main.py", line 609, in run
+    config.load_app()
+    ~~~~~~~~~~~~~~~^^
+  File "/opt/render/project/src/.venv/lib/python3.14/site-packages/uvicorn/config.py", line 427, in load_app
+    return import_from_string(self.app)
+  File "/opt/render/project/src/.venv/lib/python3.14/site-packages/uvicorn/importer.py", line 19, in import_from_string
+    module = importlib.import_module(module_str)
+  File "/opt/render/project/python/Python-3.14.3/lib/python3.14/importlib/__init__.py", line 88, in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<frozen importlib._bootstrap>", line 1398, in _gcd_import
+  File "<frozen importlib._bootstrap>", line 1371, in _find_and_load
+  File "<frozen importlib._bootstrap>", line 1342, in _find_and_load_unlocked
+  File "<frozen importlib._bootstrap>", line 938, in _load_unlocked
+  File "<frozen importlib._bootstrap_external>", line 755, in exec_module
+  File "<frozen importlib._bootstrap_external>", line 893, in get_code
+  File "<frozen importlib._bootstrap_external>", line 823, in source_to_code
+  File "<frozen importlib._bootstrap>", line 491, in _call_with_frames_removed
+  File "/opt/render/project/src/main.py", line 88
     prompt = f"""You are an expert invoice reconciliation auditor. Analyze this invoice package carefully and determine the exact business action required.
-
-Actions:
-- "settle_invoice": Valid, reconciled, and within autonomous authority limit.
-- "request_approval": Commercially valid, but exceeds delegated authority limit.
-- "hold_invoice": Payment pauses until a stated verification completes.
-- "reject_duplicate": The same commercial invoice was already paid.
-- "open_exception": Material records conflict and need an exception workflow.
-
-Invoice Package Data:
-{json.dumps(pkg, indent=2)}
-
-Rules:
-1. Identify vendorName, invoiceNumber, amountMinor (int), currency.
-2. Find the controlling paragraph determining the action and extract EXACTLY THREE decisive bracketed evidence references (e.g. ["[REF-123]", "[REF-456]", "[REF-789]"]). Ignore cover sheet
+             ^
+SyntaxError: unterminated triple-quoted f-string literal (detected at line 102)
+==> Exited with status 1
+==> Common ways to troubleshoot your deploy: https://render.com/docs/troubleshooting-deploys
+==> Running 'uvicorn main:app --host 0.0.0.0 --port $PORT'
