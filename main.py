@@ -149,5 +149,5 @@ Return raw JSON matching this schema:
             data = resp.json()
             raw_content = data["choices"][0]["message"]["content"]
             
-            # Clean Markdown code block fences safely
+            # Clean Markdown code block fences safely on one single line
             cleaned = re.sub(r"^```(?:json)?\s*|\s*
